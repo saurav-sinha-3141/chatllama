@@ -15,7 +15,7 @@ export default function ChatLlama() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    async function fetchData() {
+    async function fetchModel() {
       try {
         const { data } = await axios.get("http://localhost:11434/api/tags");
         setModel(data);
@@ -26,28 +26,36 @@ export default function ChatLlama() {
         console.error("Error fetching models:", error);
       }
     }
-    fetchData();
+    fetchModel();
   }, []);
 
   async function chat() {
     if (!prompt.trim()) return;
 
     const userMessage = { text: prompt, isUser: true };
-    setChatRes((prev) => [...prev, userMessage]);
 
-    const currentPrompt = prompt;
+    setChatRes((prev) => {
+      const updatedChat = [...prev, userMessage];
+      sendMessage(updatedChat);
+      return updatedChat;
+    });
+
     setPrompt("");
     autoResize();
+  }
 
-    const messages = [...chatRes, userMessage].map((msg) => msg.text).join("\n");
-
+  async function sendMessage(updatedChat: { text: string; isUser: boolean }[]) {
     try {
+      const messages = updatedChat
+        .map((msg) => (msg.isUser ? `User: ${msg.text}` : `AI: ${msg.text}`))
+        .join("\n");
+
       const response = await fetch("http://localhost:11434/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: selectedModel,
-          prompt: `${messages}\nUser: ${currentPrompt}\nAI:`,
+          prompt: `${messages}\nAI:`,
           stream: true,
         }),
       });
@@ -57,7 +65,6 @@ export default function ChatLlama() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let botMessage = { text: "", isUser: false };
-
       setChatRes((prev) => [...prev, botMessage]);
 
       while (true) {
@@ -72,6 +79,7 @@ export default function ChatLlama() {
             const parsed = JSON.parse(jsonChunk);
             if (parsed.response) {
               botMessage.text += parsed.response;
+
               setChatRes((prev) => [...prev.slice(0, -1), { ...botMessage }]);
               scrollToBottom();
             }
@@ -109,7 +117,7 @@ export default function ChatLlama() {
         <h1 className="text-xl font-bold">Chatllama</h1>
         <select
           className="bg-gray-800 text-white p-2 rounded-lg appearance-none outline-none cursor-pointer"
-          value={selectedModel || ""}
+          value={selectedModel || "Error"}
           onChange={(e) => setSelectedModel(e.target.value)}
         >
           {model?.models.map((m) => (
