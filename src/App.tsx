@@ -1,62 +1,75 @@
 import axios from "axios";
 import { useEffect, useState, useRef } from "react";
-import OfflineStatus from "./Components/PWA";
+import OfflineStatus from "./Components/OfflineStatus";
 
 export default function ChatLlama() {
-  type ModelType = {
+  type Role = "system" | "user" | "assistant" | "tool";
+
+  type Model = {
     models: { name: string; model: string }[];
   };
 
-  const [model, setModel] = useState<ModelType | null>(null);
+  type Message = {
+    messages: { role: Role; content: string }[];
+  }
+
+  const [model, setModel] = useState<Model | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message>({ messages: [] });
   const [prompt, setPrompt] = useState("");
-  const [chatRes, setChatRes] = useState<{ text: string; isUser: boolean }[]>([]);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    async function fetchModel() {
+    async function fetchModels() {
       try {
         const { data } = await axios.get("http://localhost:11434/api/tags");
         setModel(data);
         if (data.models.length > 0) {
           setSelectedModel(data.models[0].model);
         }
+
+        await fetch("http://localhost:11434/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: selectedModel,
+            messages: [],
+            stream: true
+          }),
+        });
+
       } catch (error) {
         console.error("Error fetching models:", error);
       }
     }
-    fetchModel();
+    fetchModels();
   }, []);
 
   async function chat() {
     if (!prompt.trim()) return;
 
-    const userMessage = { text: prompt, isUser: true };
+    const userMessage = { role: "user" as Role, content: prompt }
 
-    setChatRes((prev) => {
-      const updatedChat = [...prev, userMessage];
-      sendMessage(updatedChat);
-      return updatedChat;
+    setMessages((prev) => {
+      const updatedChat = [...prev.messages, userMessage];
+      sendMessage({ messages: updatedChat });
+      return { messages: updatedChat };
     });
 
     setPrompt("");
     autoResize();
   }
 
-  async function sendMessage(updatedChat: { text: string; isUser: boolean }[]) {
+  async function sendMessage(chatContext: Message) {
     try {
-      const messages = updatedChat
-        .map((msg) => (msg.isUser ? `User: ${msg.text}` : `AI: ${msg.text}`))
-        .join("\n");
-
-      const response = await fetch("http://localhost:11434/api/generate", {
+      const response = await fetch("http://localhost:11434/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: selectedModel,
-          prompt: `${messages}\nAI:`,
-          stream: true,
+          messages: chatContext.messages,
+          stream: true
         }),
       });
 
@@ -64,8 +77,11 @@ export default function ChatLlama() {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let botMessage = { text: "", isUser: false };
-      setChatRes((prev) => [...prev, botMessage]);
+      let botMessage = { role: "assistant" as Role, content: "" };
+
+      setMessages((prev) => ({
+        messages: [...prev.messages, botMessage],
+      }));
 
       while (true) {
         const { value, done } = await reader.read();
@@ -77,11 +93,15 @@ export default function ChatLlama() {
         for (const jsonChunk of jsonChunks) {
           try {
             const parsed = JSON.parse(jsonChunk);
-            if (parsed.response) {
-              botMessage.text += parsed.response;
 
-              setChatRes((prev) => [...prev.slice(0, -1), { ...botMessage }]);
-              scrollToBottom();
+            if (parsed.message?.content) {
+              botMessage.content += parsed.message.content;
+
+              setMessages((prev) => ({
+                messages: [...prev.messages.slice(0, -1), { ...botMessage }],
+              }));
+
+              scrollToBottom()
             }
           } catch (error) {
             console.error("Error parsing JSON chunk:", error);
@@ -110,66 +130,68 @@ export default function ChatLlama() {
   }
 
   return (
-    <div className="bg-black h-screen text-white flex flex-col">
+    <>
       <OfflineStatus />
-
-      <header className="p-4 bg-gray-900 flex justify-between items-center shadow-md">
-        <h1 className="text-xl font-bold">Chatllama</h1>
-        <select
-          className="bg-gray-800 text-white p-2 rounded-lg appearance-none outline-none cursor-pointer"
-          value={selectedModel || "Error"}
-          onChange={(e) => setSelectedModel(e.target.value)}
-        >
-          {model?.models.map((m) => (
-            <option key={m.model} value={m.model} className="bg-gray-900 text-white hover:bg-gray-700">
-              {m.name}
-            </option>
-          ))}
-        </select>
-      </header>
-
-      <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col">
-        {chatRes.length > 0 ? (
-          chatRes.map((msg, index) => (
-            <div
-              key={index}
-              className={`p-3 rounded-lg max-w-[75%] ${msg.isUser ? "bg-gray-800 self-end text-left" : "self-start text-left"}`}
-            >
-              {msg.text}
-            </div>
-          ))
-        ) : (
-          <p className="text-gray-400 text-center">No messages yet...</p>
-        )}
-      </div>
-
-      <div className="p-4 bg-gray-900">
-        <div className="flex items-center space-x-3">
-          <textarea
-            ref={textareaRef}
-            value={prompt}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                chat();
-              }
-            }}
-            onChange={(e) => {
-              setPrompt(e.target.value);
-              autoResize();
-            }}
-            className="w-full bg-gray-800 text-white p-3 rounded-lg focus:outline-none resize-none overflow-y-auto max-h-[200px]"
-            placeholder="Type your message..."
-            rows={1}
-          />
-          <button
-            onClick={chat}
-            className="bg-blue-500 hover:bg-blue-400 px-4 py-2 rounded-lg shadow-md transition active:scale-95"
+      <div className="bg-black h-screen text-white flex flex-col">
+        <header className="p-4 bg-gray-900 flex justify-between items-center shadow-md">
+          <h1 className="text-xl font-bold">Chatllama</h1>
+          <select
+            className="bg-gray-800 text-white p-2 rounded-lg appearance-none outline-none cursor-pointer"
+            value={selectedModel || ""}
+            onChange={(e) => setSelectedModel(e.target.value)}
           >
-            Send
-          </button>
+            {model?.models.map((model) => (
+              <option key={model.model} value={model.model} className="bg-gray-900 text-white hover:bg-gray-700">
+                {model.name}
+              </option>
+            ))}
+          </select>
+        </header>
+
+        <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col">
+          {messages.messages.length > 0 ? (
+            messages.messages.map((msg, index) => (
+              <div
+                key={index}
+                className={`p-3 rounded-lg max-w-[75%] 
+                  ${msg.role === "user" || msg.role === "system" ? "bg-gray-800 self-end text-left" : "self-start text-left"}`}
+              >
+                {msg.content}
+              </div>
+            ))
+          ) : (
+            <p className="text-gray-400 text-center">No messages yet...</p>
+          )}
+        </div>
+
+        <div className="p-4 bg-gray-900">
+          <div className="flex items-center space-x-3">
+            <textarea
+              ref={textareaRef}
+              value={prompt}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  chat();
+                }
+              }}
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                autoResize();
+              }}
+              className="w-full bg-gray-800 text-white p-3 rounded-lg focus:outline-none resize-none overflow-y-auto max-h-[200px]"
+              placeholder="Type your message..."
+              rows={1}
+            />
+            <button
+              onClick={chat}
+              className="bg-white hover:bg-slate-300 text-gray-800 hover:text-black cursor-pointer px-4 py-2 rounded-lg shadow-md transition active:scale-95"
+            >
+              Send
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
