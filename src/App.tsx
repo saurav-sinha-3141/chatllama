@@ -29,6 +29,7 @@ export default function ChatLlama() {
           setSelectedModel(data.models[0].model);
         }
 
+        // Prefetch for loading model
         await fetch("http://localhost:11434/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
