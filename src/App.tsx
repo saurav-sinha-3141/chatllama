@@ -144,13 +144,13 @@ export default function ChatLlama() {
             onChange={(e) => setSelectedModel(e.target.value)}
           >
             {model?.models && model.models.length > 0 ? (
-              model.models.map((m) => (
+              model.models.map((model) => (
                 <option
-                  key={m.model}
-                  value={m.model}
+                  key={model.model}
+                  value={model.model}
                   className="bg-gray-900 text-white hover:bg-gray-700"
                 >
-                  {m.name}
+                  {model.name}
                 </option>
               ))
             ) : (
