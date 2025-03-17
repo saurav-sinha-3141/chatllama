@@ -39,7 +39,7 @@ export default function ChatLlama() {
           }),
         });
       } catch (error) {
-        console.error("LUND---Error fetching models:", error);
+        console.error("Error fetching models:", error);
         setSelectedModel("Error");
       }
     }
