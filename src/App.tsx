@@ -11,7 +11,7 @@ export default function ChatLlama() {
 
   type Message = {
     messages: { role: Role; content: string }[];
-  }
+  };
 
   const [model, setModel] = useState<Model | null>(null);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
@@ -29,19 +29,18 @@ export default function ChatLlama() {
           setSelectedModel(data.models[0].model);
         }
 
-        // Prefetch for loading model
         await fetch("http://localhost:11434/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             model: selectedModel,
             messages: [],
-            stream: true
+            stream: true,
           }),
         });
-
       } catch (error) {
-        console.error("Error fetching models:", error);
+        console.error("LUND---Error fetching models:", error);
+        setSelectedModel("Error");
       }
     }
     fetchModels();
@@ -50,7 +49,7 @@ export default function ChatLlama() {
   async function chat() {
     if (!prompt.trim()) return;
 
-    const userMessage = { role: "user" as Role, content: prompt }
+    const userMessage = { role: "user" as Role, content: prompt };
 
     setMessages((prev) => {
       const updatedChat = [...prev.messages, userMessage];
@@ -70,7 +69,7 @@ export default function ChatLlama() {
         body: JSON.stringify({
           model: selectedModel,
           messages: chatContext.messages,
-          stream: true
+          stream: true,
         }),
       });
 
@@ -102,7 +101,7 @@ export default function ChatLlama() {
                 messages: [...prev.messages.slice(0, -1), { ...botMessage }],
               }));
 
-              scrollToBottom()
+              scrollToBottom();
             }
           } catch (error) {
             console.error("Error parsing JSON chunk:", error);
@@ -117,7 +116,10 @@ export default function ChatLlama() {
   function autoResize() {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+      textareaRef.current.style.height = `${Math.min(
+        textareaRef.current.scrollHeight,
+        200
+      )}px`;
     }
   }
 
@@ -141,21 +143,38 @@ export default function ChatLlama() {
             value={selectedModel || ""}
             onChange={(e) => setSelectedModel(e.target.value)}
           >
-            {model?.models.map((model) => (
-              <option key={model.model} value={model.model} className="bg-gray-900 text-white hover:bg-gray-700">
-                {model.name}
+            {model?.models && model.models.length > 0 ? (
+              model.models.map((m) => (
+                <option
+                  key={m.model}
+                  value={m.model}
+                  className="bg-gray-900 text-white hover:bg-gray-700"
+                >
+                  {m.name}
+                </option>
+              ))
+            ) : (
+              <option value="" disabled>
+                No models available
               </option>
-            ))}
+            )}
           </select>
         </header>
 
-        <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col">
+        <div
+          ref={chatContainerRef}
+          className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col"
+        >
           {messages.messages.length > 0 ? (
             messages.messages.map((msg, index) => (
               <div
                 key={index}
                 className={`p-3 rounded-lg max-w-[75%] 
-                  ${msg.role === "user" || msg.role === "system" ? "bg-gray-800 self-end text-left" : "self-start text-left"}`}
+                  ${
+                    msg.role === "user" || msg.role === "system"
+                      ? "bg-gray-800 self-end text-left"
+                      : "self-start text-left"
+                  }`}
               >
                 {msg.content}
               </div>
